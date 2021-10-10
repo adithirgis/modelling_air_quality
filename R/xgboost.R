@@ -17,41 +17,74 @@ set.seed(007)
 # lambda_bias : L2 regularization term on bias and has a default value of 0.
 
 # https://github.com/SpencerPao/Data_Science/blob/main/XGBoost/XGBoost_Regression.R
+
+
+# grid_tune <- expand.grid(
+#   lambda_bias = c(0, 0.0001, 0.001, 0.1, 1),
+#   alpha = c(0, 0.0001, 0.001, 0.1, 1),
+#   distribution = c("gaussian", "gamma"),
+#   booster = c("gbtree", "gblinear", "dart")
+# )
+
 grid_tune <- expand.grid(
-  nrounds = c(500, 1000, 1500), #number of trees
+  nrounds = c(500, 1000, 1500), # number of trees
   max_depth = c(4, 6, 8, 12, 16, 20), 
-  eta = c(0.025, 0.05, 0.1, 0.3), #Learning rate
+  eta = c(0.025, 0.05, 0.1, 0.3), # Learning rate
   gamma = c(0, 0.05, 0.1, 0.5, 0.7, 0.9, 1.0, 1e-8, 1e-6, 1e-4), # pruning --> Should be tuned. i.e
-  colsample_bytree = seq(0.2, 1, 0.01), # c(0.4, 0.6, 0.8, 1.0) subsample ratio of columns for tree
-  min_child_weight = c(1, 2, 3), # c(1,2,3) # the larger, the more conservative the model
-  subsample = seq(0.2, 1, 0.01), # c(0.5, 0.75, 1.0) # used to prevent overfitting by sampling X% training
-  lambda_bias = c(0, 0.0001, 0.001, 0.1, 1),
-  lambda = c(0, 0.0001, 0.001, 0.1, 1),
-  alpha = c(0, 0.0001, 0.001, 0.1, 1),
-  distribution = c("AUTO", "gaussian", "poisson", "gamma"),
-  booster = c("gbtree", "gblinear", "dart")
+  colsample_bytree = seq(0.2, 1, 0.01), # subsample ratio of columns for tree
+  min_child_weight = c(1, 2, 3), # the larger, the more conservative the model
+  subsample = seq(0.2, 1, 0.01), # used to prevent overfitting by sampling X% training
+  lambda = c(0, 0.0001, 0.001, 0.1, 1)
 )
+xgb_train_rmse <- NULL
+xgb_test_rmse <- NULL
 
-train_control <- trainControl(method = "cv",
-                              number = 10,
-                              verboseIter = TRUE,
-                              allowParallel = TRUE)
+start_t <- Sys.time()
+for (j in 1:nrow(grid_tune)) {
+  set.seed(108)
+  m_xgb_untuned <- xgb.cv(
+    data = data.matrix(tidy_train[, 2:5]),
+    label = data.matrix(tidy_train[, 1]),
+    nrounds = grid_tune$nrounds[j],
+    objective = "reg:squarederror",
+    nfold = 10,
+    colsample_bytree = grid_tune$colsample_bytree[j],
+    min_child_weight = grid_tune$min_child_weight[j],
+    lambda = grid_tune$lambda[j],
+    subsample = grid_tune$subsample[j],
+    gamma = grid_tune$gamma[j],
+    max_depth = grid_tune$max_depth[j],
+    eta = grid_tune$eta[j]
+  )
+  
+  xgb_train_rmse[j] <- m_xgb_untuned$evaluation_log$train_rmse_mean[m_xgb_untuned$best_iteration]
+  xgb_test_rmse[j] <- m_xgb_untuned$evaluation_log$test_rmse_mean[m_xgb_untuned$best_iteration]
+  
+  cat(j, "\n")
+}
+end_t <- Sys.time()
+#ideal hyperparamters
+ideal_para <- grid_tune[which.min(xgb_test_rmse), ]
 
-xgb_tune <- train(BAM ~ ., data = tidy_train,
-                  trControl = train_control,
-                  tuneGrid = grid_tune,
-                  method = "xgbTree",
-                  verbose = TRUE)
-xgb_tune$bestTune
+xgb_model <-
+  xgboost(
+    data = data.matrix(tidy_train[, 2:5]),
+    label = data.matrix(tidy_train[, 1]),
+    nrounds = ideal_para$nrounds,
+    objective = "reg:squarederror",
+    max_depth = ideal_para$max_depth,
+    eta = ideal_para$eta,
+    colsample_bytree = ideal_para$colsample_bytree,
+    min_child_weight = ideal_para$min_child_weight,
+    lambda = ideal_para$lambda,
+    subsample = ideal_para$subsample,
+    gamma = ideal_para$gamma
+  )
 
-# Prediction:
-file_shared$pred_xgb <- predict(xgb_tune, file_shared)
-
-mse <- mean((file_shared$BAM - file_shared$pred_xgb)^2)
-mae <- caret::MAE(file_shared$BAM, file_shared$pred_xgb)
-rmse <- caret::RMSE(file_shared$BAM, file_shared$pred_xgb)
+file_shared$pred_xgb <- predict(xgb_model, data[, 2:5])
 
 ggplot(file_shared, aes(BAM, pred_xgb)) + geom_point() + geom_smooth(method = "lm")
 summary(lm(BAM ~ pred_xgb, data = file_shared))
 mean(abs((file_shared$BAM - file_shared$pred_xgb) / file_shared$BAM)) * 100
 write.csv(file_shared, "xgboost.csv")
+
