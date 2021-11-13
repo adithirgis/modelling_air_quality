@@ -1,73 +1,114 @@
 # https://www.datacamp.com/community/tutorials/keras-r-deep-learning
 # https://rpubs.com/juanhklopper/dnn_for_regression - Should I use this?
 
-hyper_grid <- list(
-  activation = c("Rectifier", "Tanh", "RectifierWithDropout", "MaxoutWithDropout", "TanhWithDropout"), 
-  hidden = list(c(5, 5, 5, 5, 5), c(30, 30, 30, 30), c(50, 50, 50, 50), c(100, 100, 100, 100)),
-  epochs = c(50, 100, 200, 300, 400, 500),
-  l1 = c(0, 0.00001, 0.0001), 
-  l2 = c(0, 0.00001, 0.0001),
-  rate = c(0, 01, 0.005, 0.001),
-  rate_annealing = c(1e-8, 1e-7, 1e-6),
-  rho = c(0.9, 0.95, 0.99, 0.999),
-  epsilon = c(1e-10, 1e-8, 1e-6, 1e-4),
-  momentum_start = c(0, 0.5),
-  momentum_stable = c(0.99, 0.5, 0),
-  input_dropout_ratio = c(0, 0.1, 0.2),
-  max_w2 = c(1, 10, 100, 1000, 3.4028235e+38)
+
+use_python("/usr/local/bin/python")
+use_virtualenv("myenv")
+os <- import("os")
+os$listdir(".")
+
+# https://tensorflow.rstudio.com/tutorials/beginners/basic-ml/tutorial_basic_regression/
+spec <- feature_spec(tidy_train, BAM ~ . ) %>% 
+  step_numeric_column(all_numeric(), normalizer_fn = scaler_standard()) %>% 
+  fit()
+
+spec
+
+layer <- layer_dense_features(
+  feature_columns = dense_features(spec), 
+  dtype = tf$float32
+)
+layer(tidy_train)
+
+
+input <- layer_input_from_dataset(tidy_train %>% select(-BAM))
+
+output <- input %>% 
+  layer_dense_features(dense_features(spec)) %>% 
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1) 
+
+model <- keras_model(input, output)
+
+summary(model)
+
+model %>% 
+  compile(
+    loss = "mse",
+    optimizer = optimizer_rmsprop(),
+    metrics = list("mean_absolute_error")
+  )
+
+
+build_model <- function() {
+  input <- layer_input_from_dataset(tidy_train %>% select(-BAM))
+  
+  output <- input %>% 
+    layer_dense_features(dense_features(spec)) %>% 
+    layer_dense(units = 64, activation = "relu") %>%
+    layer_dense(units = 64, activation = "relu") %>%
+    layer_dense(units = 1) 
+  
+  model <- keras_model(input, output)
+  
+  model %>% 
+    compile(
+      loss = "mse",
+      optimizer = optimizer_rmsprop(),
+      metrics = list("mean_absolute_error")
+    )
+  
+  model
+}
+
+
+print_dot_callback <- callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 80 == 0) cat("\n")
+    cat(".")
+  }
+)    
+
+model <- build_model()
+# This takes time ~ 3 mins
+history <- model %>% fit(
+  x = tidy_train %>% select(-BAM),
+  y = tidy_train$BAM,
+  epochs = 500,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(print_dot_callback)
 )
 
-start <- Sys.time()
-dl_grid <- h2o.grid(algorithm = "deeplearning", 
-                    x = features,
-                    y = response,
-                    grid_id = "dl_grid",
-                    training_frame = train,
-                    nfolds = 10,                           
-                    hyper_params = hyper_grid,
-                    search_criteria = search_criteria,
-                    seed = 108
+
+plot(history)
+
+early_stop <- callback_early_stopping(monitor = "val_loss", patience = 20)
+
+model <- build_model()
+
+history <- model %>% fit(
+  x = tidy_train %>% select(-BAM),
+  y = tidy_train$BAM,
+  epochs = 500,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(early_stop)
 )
-end <- Sys.time()
 
-grid_perf <- h2o.getGrid(
-  grid_id = "dl_grid", 
-  sort_by = "mse", 
-  decreasing = FALSE
-)
-print(grid_perf)
+plot(history)
 
-best_model_id <- grid_perf@model_ids[[1]]
-best_model <- h2o.getModel(best_model_id)
+c(loss, mae) %<-% (model %>% evaluate(tidy_test %>% select(-BAM), tidy_test$BAM, verbose = 0))
 
-model_path <- h2o.saveModel(object = best_model, path = getwd(), force = TRUE)
-print(model_path)
-saved_model <- h2o.loadModel(model_path)
+paste0("Mean absolute error on test set: ", sprintf("%.2f", mae))
 
-h2o.scoreHistory(best_model)
-plot(best_model, 
-     timestep = "epochs", 
-     metric = "rmse")
+file_shared$pred_keras <- model %>% predict(tidy_test %>% select(-BAM))
+ggplot(file_shared, aes(BAM, pred_keras)) + geom_point() + geom_smooth(method = "lm")
+summary(lm(BAM ~ pred_keras, data = file_shared))
+mean(abs((file_shared$BAM - file_shared$pred_keras) / file_shared$BAM)) * 100
 
-cv_models <- sapply(best_model@model$cross_validation_models, 
-                    function(i) h2o.getModel(i$name))
+write.csv(file_shared, "keras.csv")
 
-plot(cv_models[[1]], 
-     timestep = "epochs", 
-     metric = "rmse")
-
-best_model_perf <- h2o.performance(model = best_model, newdata = test)
-
-h2o.mse(best_model_perf) %>% sqrt()
-
-test$h2o_DRF <- predict(best_model, test)
-test <- as.data.frame(test)
-
-file_shared$h2o_nn <- predict(best_model, file_shared)
-file_shared <- as.data.frame(file_shared)
-ggplot(file_shared, aes(PM2.5, h2o_nn)) + geom_point() + geom_smooth(method = "lm")
-summary(lm(PM2.5 ~ h2o_nn, data = file_shared))
-mean(abs((file_shared$PM2.5 - file_shared$h2o_nn) / file_shared$PM2.5), na.rm = TRUE) * 100
-write.csv(file_shared, "h2o_DL.csv")
-
-
+# save_model_weights_hdf5("my_model_weights.h5")
+# model %>% load_model_weights_hdf5("my_model_weights.h5")
