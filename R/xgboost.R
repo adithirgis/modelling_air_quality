@@ -20,21 +20,28 @@ set.seed(007)
 
 
 # grid_tune <- expand.grid(
-#   lambda_bias = c(0, 0.0001, 0.001, 0.1, 1),
-#   alpha = c(0, 0.0001, 0.001, 0.1, 1),
+#   nrounds = c(500, 1000, 1500), # number of trees
+#   max_depth = c(4, 6, 8, 12, 16, 20), 
+#   eta = c(0.025, 0.05, 0.1, 0.3), # Learning rate
+#   gamma = c(0, 0.05, 0.1, 0.5, 0.7, 0.9, 1.0, 1e-8, 1e-6, 1e-4), # pruning --> Should be tuned. i.e
+#   colsample_bytree = seq(0.2, 1, 0.01), # subsample ratio of columns for tree
+#   min_child_weight = c(1, 2, 3), # the larger, the more conservative the model
+#   subsample = seq(0.2, 1, 0.01), # used to prevent overfitting by sampling X% training
+#   lambda = c(0, 0.0001, 0.001, 0.1, 1),
 #   distribution = c("gaussian", "gamma"),
 #   booster = c("gbtree", "gblinear", "dart")
 # )
 
+
 grid_tune <- expand.grid(
-  nrounds = c(500, 1000, 1500), # number of trees
-  max_depth = c(4, 6, 8, 12, 16, 20), 
-  eta = c(0.025, 0.05, 0.1, 0.3), # Learning rate
-  gamma = c(0, 0.05, 0.1, 0.5, 0.7, 0.9, 1.0, 1e-8, 1e-6, 1e-4), # pruning --> Should be tuned. i.e
+  nrounds = c(500, 1000), # number of trees
+  max_depth = c(4, 6, 8, 12, 16), 
+  eta = c(0.025, 0.1, 0.3), # Learning rate
+  gamma = c(0, 0.05, 0.1, 0.5, 0.7, 0.9, 1.0, 1e-4), # pruning --> Should be tuned. i.e
   colsample_bytree = seq(0.2, 1, 0.2), # subsample ratio of columns for tree
   min_child_weight = c(1, 2, 3), # the larger, the more conservative the model
-  subsample = seq(0.2, 1, 0.01), # used to prevent overfitting by sampling X% training
-  lambda = c(0, 0.0001, 0.001, 0.1, 1)
+  subsample = seq(0.2, 1, 0.2), # used to prevent overfitting by sampling X% training
+  lambda = c(0, 0.001, 0.1, 1)
 )
 xgb_train_rmse <- NULL
 xgb_test_rmse <- NULL
@@ -59,10 +66,10 @@ for (j in 1:nrow(grid_tune)) {
   
   xgb_train_rmse[j] <- m_xgb_untuned$evaluation_log$train_rmse_mean[m_xgb_untuned$best_iteration]
   xgb_test_rmse[j] <- m_xgb_untuned$evaluation_log$test_rmse_mean[m_xgb_untuned$best_iteration]
-  
   cat(j, "\n")
 }
 end_t <- Sys.time()
+
 #ideal hyperparamters
 ideal_para <- grid_tune[which.min(xgb_test_rmse), ]
 
