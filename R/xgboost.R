@@ -146,6 +146,55 @@ write.csv(file_shared, "results/h2o_XGB.csv")
 
 
 
+######################
+
+
+
+test$h2o_xgb <- predict(best_model, test)
+test <- as.data.frame(test)
+write.csv(test, "results/test_h2o_XGB_CF_1.csv")
+
+file_shared$h2o_xgb <- predict(best_model, file_shared)
+
+model_xgb <- h2o.xgboost(x = features,
+                         y = response,
+                         training_frame = file_shared,
+                         sample_rate = 0.81,
+                         reg_lambda = 1,
+                         reg_alpha = 0.1,
+                         col_sample_rate = 0.9000,
+                         col_sample_rate_per_tree = 0.68000,
+                         min_rows = 2,
+                         min_split_improvement = 0.1,
+                         ntrees = 500, 
+                         max_depth = 12, 
+                         min_child_weight = 2,
+                         eta = 0.05,
+                         gamma = 0.1,
+                         distribution = "gamma",
+                         tree_method = "exact",
+                         grow_policy = "depthwise",
+                         categorical_encoding = "AUTO",
+                         booster = "dart",
+                         seed = 108,
+                         keep_cross_validation_predictions = TRUE,
+                         keep_cross_validation_models = TRUE,
+                         keep_cross_validation_fold_assignment = TRUE, 
+                         nfolds = 10)
+
+
+model_xgb
+
+cvpreds_id <- model_xgb@model$cross_validation_holdout_predictions_frame_id$name
+file_shared$cvpreds <- h2o.getFrame(cvpreds_id)
+h2o.varimp(model_xgb)
+h2o.varimp_plot(model_xgb)
+file_shared$h2o_xgb_m <- predict(model_xgb, file_shared)
+file_shared <- as.data.frame(file_shared)
+ggplot(file_shared, aes(BAM, h2o_xgb_m)) + geom_point() + geom_smooth(method = "lm")
+summary(lm(BAM ~ h2o_xgb_m, data = file_shared))
+mean(abs((file_shared$BAM - file_shared$h2o_xgb_m) / file_shared$BAM), na.rm = TRUE) * 100
+write.csv(file_shared, "results/h2o_XGB_CF_1.csv")
 
 
 

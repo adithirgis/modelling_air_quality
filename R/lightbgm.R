@@ -110,3 +110,54 @@ ggplot(file_shared, aes(BAM, h2o_lgb_m)) + geom_point() + geom_smooth(method = "
 summary(lm(BAM ~ h2o_lgb_m, data = file_shared))
 mean(abs((file_shared$BAM - file_shared$h2o_lgb_m) / file_shared$BAM), na.rm = TRUE) * 100
 write.csv(file_shared, "results/h2o_LGB.csv")
+
+
+
+###############
+
+
+
+test$h2o_lgb <- predict(best_model, test)
+test <- as.data.frame(test)
+write.csv(test, "results/test_h2o_LGB_CF_1.csv")
+
+file_shared$h2o_lgb <- predict(best_model, file_shared)
+
+model_lgb <- h2o.xgboost(x = features,
+                         y = response,
+                         training_frame = file_shared,
+                         grow_policy = "lossguide",
+                         tree_method = "hist",
+                         sample_rate = 0.57,
+                         reg_lambda = 0.1,
+                         categorical_encoding = "AUTO",
+                         reg_alpha = 0.0001,
+                         col_sample_rate = 0.79,
+                         col_sample_rate_per_tree = 0.46,
+                         min_rows = 2,
+                         min_split_improvement = 0.05,
+                         ntrees = 1000, 
+                         max_depth = 4, 
+                         min_child_weight = 2,
+                         eta = 0.1,
+                         gamma = 0.5,
+                         distribution = "gamma",
+                         booster = "gbtree",
+                         seed = 108,
+                         keep_cross_validation_predictions = TRUE,
+                         keep_cross_validation_models = TRUE,
+                         keep_cross_validation_fold_assignment = TRUE, 
+                         nfolds = 10)
+
+
+model_lgb
+cvpreds_id <- model_lgb@model$cross_validation_holdout_predictions_frame_id$name
+file_shared$cvpreds <- h2o.getFrame(cvpreds_id)
+h2o.varimp(model_lgb)
+h2o.varimp_plot(model_lgb)
+file_shared$h2o_lgb_m <- predict(model_lgb, file_shared)
+file_shared <- as.data.frame(file_shared)
+ggplot(file_shared, aes(BAM, h2o_lgb_m)) + geom_point() + geom_smooth(method = "lm")
+summary(lm(BAM ~ h2o_lgb_m, data = file_shared))
+mean(abs((file_shared$BAM - file_shared$h2o_lgb_m) / file_shared$BAM), na.rm = TRUE) * 100
+write.csv(file_shared, "results/h2o_LGB_CF_1.csv")

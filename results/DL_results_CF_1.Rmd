@@ -1,0 +1,75 @@
+---
+title: "DL"
+author: "Adithi R Upadhya"
+date: "03/12/2021"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## dl_grid
+
+```{r eval = FALSE}
+
+```
+
+## print(grid_perf)
+
+```{r eval = FALSE}
+
+```
+
+
+## best_model
+
+```{r eval = FALSE}
+
+```
+
+## h2o.varimp(best_model)
+
+```{r}
+
+```
+
+## cv_models
+
+```{r eval = FALSE}
+
+```
+
+
+## h2o.scoreHistory(best_model)
+
+```{r eval = FALSE}
+
+```
+
+## best_model_perf
+
+```{r eval = FALSE}
+
+```
+
+## h2o.mse(best_model_perf) %>% sqrt()
+
+```{r eval = FALSE}
+
+```
+
+
+## model_dl
+
+```{r eval = FALSE}
+
+```
+
+## h2o.varimp(model_dl)
+
+```{r eval = FALSE}
+
+
+```
+

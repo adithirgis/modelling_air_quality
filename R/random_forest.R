@@ -130,7 +130,43 @@ write.csv(file_shared, "results/h2o_RF.csv")
 
 
 
+###################
 
+test$h2o_rf <- predict(best_model, test)
+test <- as.data.frame(test)
+write.csv(test, "results/test_h2o_RF_CF_1.csv")
+
+file_shared$h2o_rf <- predict(best_model, file_shared)
+
+# Train Final Model: Once we have selected the best model, we train on the full dataset. This model goes into production.
+model_drf <- h2o.randomForest(x = features, 
+                              y = response, 
+                              training_frame = file_shared,
+                              ntrees = 200,
+                              sample_rate = 0.8,
+                              max_depth = 10,
+                              min_rows = 5,
+                              nbins = 10,
+                              keep_cross_validation_predictions = TRUE,
+                              keep_cross_validation_models = TRUE,
+                              keep_cross_validation_fold_assignment = TRUE, 
+                              nfolds = 10)
+
+model_drf
+
+
+cvpreds_id <- model_drf@model$cross_validation_holdout_predictions_frame_id$name
+file_shared$cvpreds <- h2o.getFrame(cvpreds_id)
+
+h2o.varimp(model_drf)
+h2o.varimp_plot(model_drf)
+file_shared$h2o_rf_m <- predict(model_drf, file_shared)
+file_shared <- as.data.frame(file_shared)
+ggplot(file_shared, aes(BAM, h2o_rf_m)) + geom_point() + geom_smooth(method = "lm")
+summary(lm(BAM ~ h2o_rf_m, data = file_shared))
+mean(abs((file_shared$BAM - file_shared$h2o_rf_m) / file_shared$BAM), na.rm = TRUE) * 100
+
+write.csv(file_shared, "results/h2o_RF_CF_1.csv")
 
 
 
