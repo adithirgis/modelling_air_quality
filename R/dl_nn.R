@@ -1,55 +1,3 @@
-library(xgboost)
-library(readxl)
-library(tidyverse)
-library(tidymodels)
-library(h2o)
-library(here)
-library(data.table)
-
-set.seed(108)
-
-file_shared <- read_csv(here("data", "PurpleAir_BAM_Data.csv")) %>%
-  select("date" = `Date and time (Before time stamp)`, 
-         "BAM" = `BAM-PM2.5`, "PA_CF_1" = `PA-PM2.5 (CF=1)`, "PA_CF_ATM" = `PA-PM2.5 (CF=ATM)`, 
-         "PA_RH" = `PA-RH`, "PA_Temp" = `PA-Temperature`, BC) %>%
-  mutate(date = as.POSIXct(date, format = "%d-%m-%Y %H:%M", tz = "Asia/Kolkata"),
-         hour = format(date, "%H")) %>% 
-  mutate_if(is.character, as.numeric) %>% 
-  na.omit() %>%
-  select(BAM, everything(), -date, -BC, -PA_CF_1)
-
-
-file_shared$hour <- as.factor(file_shared$hour)
-
-
-# h2o.shutdown()
-h2o.no_progress()
-h2o.init(max_mem_size = "6g")
-
-file_shared <- as.h2o(file_shared)
-
-splits <- h2o.splitFrame(
-  data = file_shared,
-  ratios = c(0.7, 0),   
-  destination_frames = c("train_hex", "valid_hex", "test_hex"), seed = 108
-)
-train <- splits[[1]]
-valid <- splits[[2]]
-test  <- splits[[3]]
-
-response <- "BAM"
-features <- setdiff(names(train), c(response))
-h2o.describe(file_shared)
-
-search_criteria <- list(strategy = "RandomDiscrete", 
-                        stopping_metric = "mse",
-                        stopping_tolerance = 1e-4,
-                        stopping_rounds = 10,
-                        max_runtime_secs = 60*60,
-                        seed = 108)
-
-
-
 hyper_grid <- list(
   activation = c("Rectifier", "Tanh", "RectifierWithDropout", "TanhWithDropout"), 
   hidden = list(c(5, 5, 5, 5, 5), c(30, 30, 30, 30), c(50, 50, 50, 50)),
@@ -66,7 +14,6 @@ hyper_grid <- list(
   max_w2 = c(1, 10, 100, 1000, 3.4028235e+38)
 )
 
-start <- Sys.time()
 dl_grid <- h2o.grid(algorithm = "deeplearning", 
                     x = features,
                     y = response,
@@ -77,7 +24,6 @@ dl_grid <- h2o.grid(algorithm = "deeplearning",
                     search_criteria = search_criteria,
                     seed = 108
 )
-end <- Sys.time()
 
 grid_perf <- h2o.getGrid(
   grid_id = "dl_grid", 
@@ -88,7 +34,9 @@ print(grid_perf)
 
 best_model_id <- grid_perf@model_ids[[1]]
 best_model <- h2o.getModel(best_model_id)
-
+best_model
+h2o.varimp(best_model)
+h2o.varimp_plot(best_model)
 model_path <- h2o.saveModel(object = best_model, path = getwd(), force = TRUE)
 print(model_path)
 saved_model <- h2o.loadModel(model_path)
@@ -100,20 +48,57 @@ plot(best_model,
 
 cv_models <- sapply(best_model@model$cross_validation_models, 
                     function(i) h2o.getModel(i$name))
+cv_models
 
 plot(cv_models[[1]], 
      timestep = "epochs", 
      metric = "rmse")
 
 best_model_perf <- h2o.performance(model = best_model, newdata = test)
-
+best_model_perf
 h2o.mse(best_model_perf) %>% sqrt()
 
-file_shared$nn <- predict(best_model, file_shared)
+test$h2o_DL <- predict(best_model, test)
+test <- as.data.frame(test)
+write.csv(test, "results/test_h2o_DL.csv")
+
+file_shared$h2o_dl <- predict(best_model, file_shared)
+
+
+model_dl <- h2o.deeplearning(x = features,
+                             y = response,
+                             training_frame = file_shared,
+                             distribution = "gamma",
+                             hidden =  c(5, 5, 5, 5),
+                             rate = 0.005,
+                             epochs = 500,
+                             l1 = 0.0001, 
+                             l2 = 0.0001,
+                             rho = 0.90,
+                             categorical_encoding = "AUTO",
+                             epsilon = 1e-6,
+                             momentum_start = 0,
+                             input_dropout_ratio = 0.2,
+                             max_w2 = 10,
+                             reproducible = TRUE,
+                             activation = "Tanh",
+                             seed = 108,
+                             keep_cross_validation_predictions = TRUE,
+                             keep_cross_validation_models = TRUE,
+                             keep_cross_validation_fold_assignment = TRUE, 
+                             nfolds = 10)
+
+model_dl
+
+cvpreds_id <- model_dl@model$cross_validation_holdout_predictions_frame_id$name
+file_shared$cvpreds <- h2o.getFrame(cvpreds_id)
+
+h2o.varimp(model_dl)
+h2o.varimp_plot(model_dl)
+
+file_shared$h2o_dl_m <- predict(model_dl, file_shared)
 file_shared <- as.data.frame(file_shared)
-ggplot(file_shared, aes(BAM, h2o_nn)) + geom_point() + geom_smooth(method = "lm")
-summary(lm(BAM ~ h2o_nn, data = file_shared))
-mean(abs((file_shared$BAM - file_shared$h2o_nn) / file_shared$BAM), na.rm = TRUE) * 100
-write.csv(file_shared, "NN.csv")
-
-
+ggplot(file_shared, aes(BAM, h2o_dl_m)) + geom_point() + geom_smooth(method = "lm")
+summary(lm(BAM ~ h2o_dl_m, data = file_shared))
+mean(abs((file_shared$BAM - file_shared$h2o_dl_m) / file_shared$BAM), na.rm = TRUE) * 100
+write.csv(file_shared, "results/h2o_DL.csv")

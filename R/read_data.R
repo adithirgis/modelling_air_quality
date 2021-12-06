@@ -1,28 +1,12 @@
-library(LiblineaR)
-library(readxl)
 library(xgboost)
-library(doParallel)
+library(readxl)
 library(tidyverse)
-library(e1071)
-library(caret)
-library(keras)
-library(here)
-library(reticulate)
 library(tidymodels)
-library(tfdatasets)
-library(future)
-library(ranger)
-library(parallelly)
-library(mgcv)
-library(neuralnet)
-library(reticulate)
-
+library(h2o)
+library(here)
+library(data.table)
 
 set.seed(108)
-# use_python("/usr/local/bin/python")
-# use_virtualenv("myenv")
-# os <- import("os")
-# os$listdir(".")
 
 file_shared <- read_csv(here("data", "PurpleAir_BAM_Data.csv")) %>%
   select("date" = `Date and time (Before time stamp)`, 
@@ -34,10 +18,31 @@ file_shared <- read_csv(here("data", "PurpleAir_BAM_Data.csv")) %>%
   na.omit() %>%
   select(BAM, everything(), -date, -BC, -PA_CF_1)
 
+
 file_shared$hour <- as.factor(file_shared$hour)
 
-# Let's start by splitting the data into a testing and training set:
-tidy_split <- initial_split(file_shared)
-tidy_train <- training(tidy_split)
-tidy_test <- testing(tidy_split)
-tidy_kfolds <- vfold_cv(tidy_train)
+
+# h2o.shutdown()
+h2o.no_progress()
+h2o.init(max_mem_size = "25g", min_mem_size = "8g")
+
+file_shared <- as.h2o(file_shared)
+
+splits <- h2o.splitFrame(
+  data = file_shared,
+  ratios = c(0.7, 0),   
+  destination_frames = c("train_hex", "valid_hex", "test_hex"), seed = 108
+)
+train <- splits[[1]]
+valid <- splits[[2]]
+test  <- splits[[3]]
+
+response <- "BAM"
+features <- setdiff(names(train), c(response))
+h2o.describe(file_shared)
+
+search_criteria <- list(strategy = "RandomDiscrete", 
+                        stopping_metric = "mse",
+                        stopping_tolerance = 1e-4,
+                        max_runtime_secs = 60,
+                        seed = 108)
