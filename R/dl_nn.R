@@ -1,8 +1,8 @@
 hyper_grid <- list(
-  activation = c("Rectifier", "Tanh", "RectifierWithDropout", "MaxoutWithDropout", "TanhWithDropout"),
+  activation = c("Tanh", "TanhWithDropout"),
   hidden = list(c(5, 5, 5, 5, 5), c(30, 30, 30, 30), c(50, 50, 50, 50), c(100, 100, 100, 100)),
   epochs = c(50, 100, 200, 300, 400, 500),
-  l1 = c(0, 0.00001, 0.0001),
+  l1 = c(0, 0.00001, 0.0001, 1e-5),
   l2 = c(0, 0.00001, 0.0001),
   rate = c(0, 0.005, 0.001),
   rate_annealing = c(1e-7, 1e-6),
@@ -10,9 +10,9 @@ hyper_grid <- list(
   epsilon = c(1e-10, 1e-8, 1e-6, 1e-4),
   momentum_start = c(0, 0.5),
   momentum_stable = c(0.99, 0.5, 0),
-  distribution = c("AUTO", "gaussian", "poisson", "gamma"),
+  distribution = c("AUTO"),
   input_dropout_ratio = c(0, 0.1, 0.2),
-  max_w2 = c(1, 10, 100, 1000, 3.4028235e+38)
+  max_w2 = c(1, 10, 100)
 )
 
 dl_grid <- h2o.grid(algorithm = "deeplearning", 
@@ -20,11 +20,15 @@ dl_grid <- h2o.grid(algorithm = "deeplearning",
                     y = response,
                     grid_id = "dl_grid",
                     training_frame = train,
+                    keep_cross_validation_predictions = TRUE,
+                    keep_cross_validation_models = TRUE,
+                    keep_cross_validation_fold_assignment = TRUE, 
                     nfolds = 10,                           
                     hyper_params = hyper_grid,
                     search_criteria = search_criteria,
                     seed = 108
 )
+dl_grid
 
 grid_perf <- h2o.getGrid(
   grid_id = "dl_grid", 
@@ -63,6 +67,8 @@ h2o.mse(best_model_perf) %>% sqrt()
 
 
 
+
+
 test$h2o_DL <- predict(best_model, test)
 test <- as.data.frame(test)
 write.csv(test, "results/test_h2o_DL.csv")
@@ -73,20 +79,20 @@ file_shared$h2o_dl <- predict(best_model, file_shared)
 model_dl <- h2o.deeplearning(x = features,
                              y = response,
                              training_frame = file_shared,
-                             distribution = "gamma",
-                             hidden =  c(5, 5, 5, 5),
-                             rate = 0.005,
-                             epochs = 500,
-                             l1 = 0.0001, 
+                             distribution = "gaussian",
+                             hidden =  c(50, 50, 50, 50),
+                             rate = 0.000,
+                             epochs = 19,
+                             l1 = 0.000, 
                              l2 = 0.0001,
-                             rho = 0.90,
+                             rho = 0.95,
                              categorical_encoding = "AUTO",
-                             epsilon = 1e-6,
+                             epsilon = 1e-7,
                              momentum_start = 0,
-                             input_dropout_ratio = 0.2,
-                             max_w2 = 10,
+                             input_dropout_ratio = 0.1,
+                             max_w2 = 100,
                              reproducible = TRUE,
-                             activation = "Tanh",
+                             activation = "Rectifier",
                              seed = 108,
                              keep_cross_validation_predictions = TRUE,
                              keep_cross_validation_models = TRUE,
@@ -109,6 +115,9 @@ mean(abs((file_shared$BAM - file_shared$h2o_dl_m) / file_shared$BAM), na.rm = TR
 write.csv(file_shared, "results/h2o_DL.csv")
 
 
+
+
+
 #########
 
 test$h2o_DL <- predict(best_model, test)
@@ -121,15 +130,15 @@ file_shared$h2o_dl <- predict(best_model, file_shared)
 model_dl <- h2o.deeplearning(x = features,
                              y = response,
                              training_frame = file_shared,
-                             distribution = "gamma",
-                             hidden =  c(5, 5, 5, 5),
-                             rate = 0.005,
-                             epochs = 500,
-                             l1 = 0.0001, 
-                             l2 = 0.0001,
+                             distribution = "gaussian",
+                             hidden =  c(30, 30, 30, 30),
+                             rate = 0.000,
+                             epochs = 207,
+                             l1 = 0.00001, 
+                             l2 = 0.00001,
                              rho = 0.90,
                              categorical_encoding = "AUTO",
-                             epsilon = 1e-6,
+                             epsilon = 1e-7,
                              momentum_start = 0,
                              input_dropout_ratio = 0.2,
                              max_w2 = 10,

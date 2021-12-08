@@ -24,7 +24,7 @@
 # collect the results and sort by our model performance metric of choice
 hyper_grid <- list(
   ntrees      = seq(200, 400, by = 200),
-  mtries      = seq(2, 6, by = 4),
+  mtries      = seq(1, 4, by = 2),
   max_depth   = seq(10, 40, by = 20),
   min_rows    = seq(5, 10, by = 5),
   nbins       = seq(10, 40, by = 20),
@@ -92,6 +92,8 @@ best_model_perf
 h2o.mse(best_model_perf) %>% sqrt()
 
 
+
+
 test$h2o_rf <- predict(best_model, test)
 test <- as.data.frame(test)
 write.csv(test, "results/test_h2o_RF.csv")
@@ -102,7 +104,8 @@ file_shared$h2o_rf <- predict(best_model, file_shared)
 model_drf <- h2o.randomForest(x = features, 
                               y = response, 
                               training_frame = file_shared,
-                              ntrees = 200,
+                              ntrees = 400,
+                              mtries = 3,
                               sample_rate = 0.8,
                               max_depth = 10,
                               min_rows = 5,
@@ -142,10 +145,11 @@ file_shared$h2o_rf <- predict(best_model, file_shared)
 model_drf <- h2o.randomForest(x = features, 
                               y = response, 
                               training_frame = file_shared,
-                              ntrees = 200,
+                              ntrees = 400,
                               sample_rate = 0.8,
                               max_depth = 10,
                               min_rows = 5,
+                              mtries = 3,
                               nbins = 10,
                               keep_cross_validation_predictions = TRUE,
                               keep_cross_validation_models = TRUE,
