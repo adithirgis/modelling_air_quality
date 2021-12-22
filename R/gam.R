@@ -34,15 +34,32 @@ file_shared <- read_csv(here("data", "PurpleAir_BAM_Data.csv")) %>%
 
 
 # file_shared$hour <- as.factor(file_shared$hour)
+# gam_model <- train(BAM ~ PA_CF_1 + PA_RH + PA_Temp, 
+#            data = file_shared,
+#            method = "gam",
+#            trControl = trainControl(method = "cv", number = 10, 
+#                                     savePredictions = TRUE)
+# )
+# 
+# file_shared$Predicted_Corrected_1_pred <- predict(gam_model, newdata = file_shared)
+# write.csv(file_shared, "gam_CF_1.csv")
+# gam_cv <- as.data.frame(gam_model$pred)
+# gam_cv <- gam_cv %>% 
+#   subset(select == "FALSE")
+# write.csv(gam_cv, "gam_CF_1_CV.csv")
+
+
 gam_model <- train(BAM ~ PA_CF_ATM + PA_RH + PA_Temp, 
-           data = file_shared,
-           method = "gam",
-           trControl = trainControl(method = "cv", number = 10, 
-                                    savePredictions = TRUE)
+                   data = file_shared,
+                   method = "gam",
+                   trControl = trainControl(method = "cv", number = 10, 
+                                            savePredictions = TRUE)
 )
 
 file_shared$Predicted_Corrected_ATM_pred <- predict(gam_model, newdata = file_shared)
 write.csv(file_shared, "gam_CF_ATM.csv")
-
-write.csv(as.data.frame(gam_model$pred), "gam_CF_ATM_CV.csv")
+gam_cv <- as.data.frame(gam_model$pred)
+gam_cv <- gam_cv %>% 
+  subset(select == "FALSE")
+write.csv(gam_cv, "gam_CF_ATM_CV.csv")
 
